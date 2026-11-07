@@ -21,8 +21,9 @@ local function corner(o, r)
 	Instance.new("UICorner", o).CornerRadius = UDim.new(0, r)
 end
 
-local grayColor = Color3.fromRGB(120, 120, 120)
-local darkColor = Color3.fromRGB(80, 80, 80)
+local darkColor = Color3.fromRGB(20, 20, 20)
+local buttonColor = Color3.fromRGB(35, 35, 35)
+local strokeColor = Color3.fromRGB(10, 10, 10)
 local greenColor = Color3.fromRGB(0, 255, 65)
 local blackColor = Color3.fromRGB(0, 0, 0)
 
@@ -30,7 +31,7 @@ local blackColor = Color3.fromRGB(0, 0, 0)
 local toggle = make("TextButton", {
 	Size = UDim2.fromOffset(72, 24),
 	Position = UDim2.new(0, 10, 0, 60),
-	BackgroundColor3 = darkColor,
+	BackgroundColor3 = buttonColor,
 	TextColor3 = greenColor,
 	TextStrokeColor3 = blackColor,
 	TextStrokeTransparency = 0,
@@ -39,18 +40,19 @@ local toggle = make("TextButton", {
 	Text = "Spectate",
 }, gui)
 corner(toggle, 5)
+make("UIStroke", { Color = strokeColor, Thickness = 1.5 }, toggle)
 
 -- Bottom panel
 local panel = make("Frame", {
 	AnchorPoint = Vector2.new(0.5, 1),
 	Position = UDim2.new(0.5, 0, 1, -20),
 	Size = UDim2.fromOffset(220, 80),
-	BackgroundColor3 = grayColor,
+	BackgroundColor3 = darkColor,
 	BorderSizePixel = 0,
 	Visible = false,
 }, gui)
 corner(panel, 7)
-make("UIStroke", { Color = Color3.fromRGB(40, 40, 40), Thickness = 1.5 }, panel)
+make("UIStroke", { Color = strokeColor, Thickness = 1.5 }, panel)
 
 local title = make("TextLabel", {
 	Size = UDim2.new(1, -8, 0, 20),
@@ -69,7 +71,7 @@ local function makeBtn(text, pos)
 	local b = make("TextButton", {
 		Size = UDim2.fromOffset(64, 26),
 		Position = pos,
-		BackgroundColor3 = darkColor,
+		BackgroundColor3 = buttonColor,
 		TextColor3 = greenColor,
 		TextStrokeColor3 = blackColor,
 		TextStrokeTransparency = 0,
@@ -78,6 +80,7 @@ local function makeBtn(text, pos)
 		Text = text,
 	}, panel)
 	corner(b, 5)
+	make("UIStroke", { Color = strokeColor, Thickness = 1 }, b)
 	return b
 end
 
