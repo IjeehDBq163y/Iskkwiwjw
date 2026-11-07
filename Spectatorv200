@@ -1,0 +1,176 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+local NEXT_LABEL = "Next" -- change this to the text from your image
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "SpectateGui"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local function make(class, props, parent)
+	local o = Instance.new(class)
+	for k, v in pairs(props) do o[k] = v end
+	o.Parent = parent
+	return o
+end
+
+local function corner(o, r)
+	Instance.new("UICorner", o).CornerRadius = UDim.new(0, r)
+end
+
+local grayColor = Color3.fromRGB(120, 120, 120)
+local darkColor = Color3.fromRGB(80, 80, 80)
+local greenColor = Color3.fromRGB(0, 255, 65)
+local blackColor = Color3.fromRGB(0, 0, 0)
+
+-- Top-left toggle
+local toggle = make("TextButton", {
+	Size = UDim2.fromOffset(72, 24),
+	Position = UDim2.new(0, 10, 0, 60),
+	BackgroundColor3 = darkColor,
+	TextColor3 = greenColor,
+	TextStrokeColor3 = blackColor,
+	TextStrokeTransparency = 0,
+	Font = Enum.Font.GothamBold,
+	TextSize = 12,
+	Text = "Spectate",
+}, gui)
+corner(toggle, 5)
+
+-- Bottom panel
+local panel = make("Frame", {
+	AnchorPoint = Vector2.new(0.5, 1),
+	Position = UDim2.new(0.5, 0, 1, -20),
+	Size = UDim2.fromOffset(220, 80),
+	BackgroundColor3 = grayColor,
+	BorderSizePixel = 0,
+	Visible = false,
+}, gui)
+corner(panel, 7)
+make("UIStroke", { Color = Color3.fromRGB(40, 40, 40), Thickness = 1.5 }, panel)
+
+local title = make("TextLabel", {
+	Size = UDim2.new(1, -8, 0, 20),
+	Position = UDim2.fromOffset(4, 5),
+	BackgroundTransparency = 1,
+	TextColor3 = greenColor,
+	TextStrokeColor3 = blackColor,
+	TextStrokeTransparency = 0,
+	Font = Enum.Font.GothamBold,
+	TextSize = 12,
+	Text = "Not spectating",
+	TextTruncate = Enum.TextTruncate.AtEnd,
+}, panel)
+
+local function makeBtn(text, pos)
+	local b = make("TextButton", {
+		Size = UDim2.fromOffset(64, 26),
+		Position = pos,
+		BackgroundColor3 = darkColor,
+		TextColor3 = greenColor,
+		TextStrokeColor3 = blackColor,
+		TextStrokeTransparency = 0,
+		Font = Enum.Font.GothamBold,
+		TextSize = 12,
+		Text = text,
+	}, panel)
+	corner(b, 5)
+	return b
+end
+
+local prevBtn = makeBtn("Prev", UDim2.new(0, 6, 1, -34))        -- left edge
+local stopBtn = makeBtn("Stop", UDim2.new(0.5, -32, 1, -34))    -- middle
+local nextBtn = makeBtn(NEXT_LABEL, UDim2.new(1, -70, 1, -34))  -- right edge
+
+-- Spectate logic
+local target = nil
+
+-- Keeps the camera on the target's humanoid every frame.
+RunService.RenderStepped:Connect(function()
+	if not target then return end
+	local char = target.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if hum and camera.CameraSubject ~= hum then
+		camera.CameraSubject = hum
+	end
+end)
+
+local function stop()
+	target = nil
+	title.Text = "Not spectating"
+	local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	if hum then camera.CameraSubject = hum end
+end
+
+local function setTarget(p)
+	target = p
+	title.Text = "Spectating: " .. p.Name
+	local char = p.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if hum then camera.CameraSubject = hum end
+end
+
+local function getOthers()
+	local t = {}
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player then table.insert(t, p) end
+	end
+	return t
+end
+
+-- Only changes target when you press Prev or Next (or the target leaves)
+local function step(dir)
+	local list = getOthers()
+	if #list == 0 then
+		stop()
+		return
+	end
+	local idx = 0
+	for i, p in ipairs(list) do
+		if p == target then idx = i end
+	end
+	if idx == 0 then
+		idx = dir > 0 and 1 or #list
+	else
+		idx = ((idx - 1 + dir) % #list) + 1
+	end
+	setTarget(list[idx])
+end
+
+prevBtn.MouseButton1Click:Connect(function() step(-1) end)
+stopBtn.MouseButton1Click:Connect(stop)
+nextBtn.MouseButton1Click:Connect(function() step(1) end)
+
+toggle.MouseButton1Click:Connect(function()
+	panel.Visible = not panel.Visible
+	toggle.Text = panel.Visible and "Close" or "Spectate"
+end)
+
+-- Only acts when the player you're currently spectating leaves
+Players.PlayerRemoving:Connect(function(leaving)
+	if leaving ~= target then return end
+
+	local list = {}
+	local leavingIdx = nil
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player then
+			if p == leaving then
+				leavingIdx = #list + 1
+			else
+				table.insert(list, p)
+			end
+		end
+	end
+
+	if #list == 0 then
+		stop()
+		return
+	end
+
+	-- Move to the player who took the leaving player's spot
+	local newIdx = math.min(leavingIdx or 1, #list)
+	setTarget(list[newIdx])
+end)
