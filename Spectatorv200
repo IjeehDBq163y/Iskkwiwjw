@@ -1,151 +1,191 @@
--- Spectate logic
-local target = nil
-local renderStepName = "StableSpectateCamera"
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
 
-local function getHumanoid(playerToCheck)
-	local character = playerToCheck and playerToCheck.Character
-	return character and character:FindFirstChildOfClass("Humanoid")
+local NEXT_LABEL = "Next" -- change this to the text from your image
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "SpectateGui"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local function make(class, props, parent)
+	local o = Instance.new(class)
+	for k, v in pairs(props) do o[k] = v end
+	o.Parent = parent
+	return o
 end
 
-local function setCameraSubject(humanoid)
-	local currentCamera = workspace.CurrentCamera
-	if currentCamera and humanoid and currentCamera.CameraSubject ~= humanoid then
-		currentCamera.CameraType = Enum.CameraType.Custom
-		currentCamera.CameraSubject = humanoid
+local function corner(o, r)
+	Instance.new("UICorner", o).CornerRadius = UDim.new(0, r)
+end
+
+local darkColor = Color3.fromRGB(20, 20, 20)
+local buttonColor = Color3.fromRGB(35, 35, 35)
+local strokeColor = Color3.fromRGB(10, 10, 10)
+local greenColor = Color3.fromRGB(0, 255, 65)
+local blackColor = Color3.fromRGB(0, 0, 0)
+
+-- Top-left toggle
+local toggle = make("TextButton", {
+	Size = UDim2.fromOffset(60, 20),
+	Position = UDim2.new(0, 8, 0, 56),
+	BackgroundColor3 = buttonColor,
+	TextColor3 = greenColor,
+	TextStrokeColor3 = blackColor,
+	TextStrokeTransparency = 0,
+	Font = Enum.Font.GothamBold,
+	TextSize = 11,
+	Text = "Spectate",
+}, gui)
+corner(toggle, 4)
+make("UIStroke", { Color = strokeColor, Thickness = 1 }, toggle)
+
+-- Bottom panel
+local panel = make("Frame", {
+	AnchorPoint = Vector2.new(0.5, 1),
+	Position = UDim2.new(0.5, 0, 1, -20),
+	Size = UDim2.fromOffset(180, 64),
+	BackgroundColor3 = darkColor,
+	BorderSizePixel = 0,
+	Visible = false,
+}, gui)
+corner(panel, 6)
+make("UIStroke", { Color = strokeColor, Thickness = 1 }, panel)
+
+local title = make("TextLabel", {
+	Size = UDim2.new(1, -8, 0, 16),
+	Position = UDim2.fromOffset(4, 4),
+	BackgroundTransparency = 1,
+	TextColor3 = greenColor,
+	TextStrokeColor3 = blackColor,
+	TextStrokeTransparency = 0,
+	Font = Enum.Font.GothamBold,
+	TextSize = 11,
+	Text = "Not spectating",
+	TextTruncate = Enum.TextTruncate.AtEnd,
+}, panel)
+
+local function makeBtn(text, pos)
+	local b = make("TextButton", {
+		Size = UDim2.fromOffset(52, 22),
+		Position = pos,
+		BackgroundColor3 = buttonColor,
+		TextColor3 = greenColor,
+		TextStrokeColor3 = blackColor,
+		TextStrokeTransparency = 0,
+		Font = Enum.Font.GothamBold,
+		TextSize = 11,
+		Text = text,
+	}, panel)
+	corner(b, 4)
+	make("UIStroke", { Color = strokeColor, Thickness = 1 }, b)
+	return b
+end
+
+local prevBtn = makeBtn("Prev", UDim2.new(0, 5, 1, -28))
+local stopBtn = makeBtn("Stop", UDim2.new(0.5, -26, 1, -28))
+local nextBtn = makeBtn(NEXT_LABEL, UDim2.new(1, -57, 1, -28))
+
+-- Spectate logic
+local BIND_NAME = "SpectateCamera"
+local target = nil
+
+local function getHum(p)
+	local char = p and p.Character
+	return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+-- Runs after the default camera update every frame.
+-- Because it reads the target's current character each time,
+-- respawns and camera resets are corrected automatically.
+local function applyCamera()
+	if not target or target.Parent ~= Players then return end
+	local hum = getHum(target)
+	if hum and camera.CameraSubject ~= hum then
+		camera.CameraSubject = hum
 	end
 end
 
 local function stop()
 	target = nil
+	pcall(function()
+		RunService:UnbindFromRenderStep(BIND_NAME)
+	end)
 	title.Text = "Not spectating"
-
-	local humanoid = getHumanoid(player)
-	if humanoid then
-		setCameraSubject(humanoid)
-	end
+	local hum = getHum(player)
+	if hum then camera.CameraSubject = hum end
 end
 
-local function setTarget(playerToSpectate)
-	if not playerToSpectate or playerToSpectate == player then
-		stop()
-		return
-	end
-
-	target = playerToSpectate
-	title.Text = "Spectating: " .. playerToSpectate.Name
-
-	local humanoid = getHumanoid(playerToSpectate)
-	if humanoid then
-		setCameraSubject(humanoid)
-	end
+local function setTarget(p)
+	target = p
+	title.Text = "Spectating: " .. p.Name
+	-- Unbind first so we never stack duplicate bindings
+	pcall(function()
+		RunService:UnbindFromRenderStep(BIND_NAME)
+	end)
+	RunService:BindToRenderStep(BIND_NAME, Enum.RenderPriority.Camera.Value + 1, applyCamera)
+	applyCamera()
 end
 
 local function getOthers()
-	local list = {}
-
-	for _, otherPlayer in ipairs(Players:GetPlayers()) do
-		if otherPlayer ~= player then
-			table.insert(list, otherPlayer)
-		end
+	local t = {}
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player then table.insert(t, p) end
 	end
-
-	return list
+	return t
 end
 
+-- Only changes target when you press Prev or Next (or the target leaves)
 local function step(dir)
 	local list = getOthers()
-
 	if #list == 0 then
 		stop()
 		return
 	end
-
-	local index = table.find(list, target) or 0
-
-	if index == 0 then
-		index = dir > 0 and 1 or #list
-	else
-		index = ((index - 1 + dir) % #list) + 1
+	local idx = 0
+	for i, p in ipairs(list) do
+		if p == target then idx = i end
 	end
-
-	setTarget(list[index])
+	if idx == 0 then
+		idx = dir > 0 and 1 or #list
+	else
+		idx = ((idx - 1 + dir) % #list) + 1
+	end
+	setTarget(list[idx])
 end
 
-prevBtn.MouseButton1Click:Connect(function()
-	step(-1)
-end)
-
+prevBtn.MouseButton1Click:Connect(function() step(-1) end)
 stopBtn.MouseButton1Click:Connect(stop)
-
-nextBtn.MouseButton1Click:Connect(function()
-	step(1)
-end)
+nextBtn.MouseButton1Click:Connect(function() step(1) end)
 
 toggle.MouseButton1Click:Connect(function()
 	panel.Visible = not panel.Visible
 	toggle.Text = panel.Visible and "Close" or "Spectate"
 end)
 
--- Recheck after Roblox's camera update, in case another script changes
--- the camera subject or the CurrentCamera gets replaced.
-RunService:BindToRenderStep(
-	renderStepName,
-	Enum.RenderPriority.Camera.Value + 1,
-	function()
-		if not target or target.Parent ~= Players then
-			return
-		end
-
-		local humanoid = getHumanoid(target)
-		if humanoid then
-			setCameraSubject(humanoid)
-		end
-	end
-)
-
--- Reattach when the spectated player respawns.
-local targetCharacterConnection
-
-local function watchTarget(playerToWatch)
-	if targetCharacterConnection then
-		targetCharacterConnection:Disconnect()
-		targetCharacterConnection = nil
-	end
-
-	if playerToWatch then
-		targetCharacterConnection = playerToWatch.CharacterAdded:Connect(function(character)
-			local humanoid = character:WaitForChild("Humanoid", 10)
-			if target == playerToWatch and humanoid then
-				setCameraSubject(humanoid)
-			end
-		end)
-	end
-end
-
-local originalSetTarget = setTarget
-setTarget = function(playerToSpectate)
-	originalSetTarget(playerToSpectate)
-	watchTarget(target)
-end
-
-local originalStop = stop
-stop = function()
-	watchTarget(nil)
-	originalStop()
-end
-
+-- Only acts when the player you're currently spectating leaves
 Players.PlayerRemoving:Connect(function(leaving)
-	if leaving ~= target then
-		return
-	end
+	if leaving ~= target then return end
 
-	local list = getOthers()
-	local leavingIndex = table.find(list, leaving) or 1
-	table.remove(list, leavingIndex)
+	local list = {}
+	local leavingIdx = nil
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player then
+			if p == leaving then
+				leavingIdx = #list + 1
+			else
+				table.insert(list, p)
+			end
+		end
+	end
 
 	if #list == 0 then
 		stop()
-	else
-		setTarget(list[math.min(leavingIndex, #list)])
+		return
 	end
+
+	local newIdx = math.min(leavingIdx or 1, #list)
+	setTarget(list[newIdx])
 end)
